@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ku">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRO SHOP - کوردی</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body{
+  font-family:Arial;
+  background:#eef2f7;
+  margin:0;
+  transition:0.3s;
+}
+
+.header{
+  background:#1976d2;
+  color:#fff;
+  padding:10px;
+  text-align:center;
+}
+
+.box{padding:10px;}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:10px;
+}
+
+.card{
+  background:#fff;
+  padding:10px;
+  border-radius:10px;
+  margin:5px 0;
+  box-shadow:0 2px 5px rgba(0,0,0,0.1);
+}
+
+button{
+  width:100%;
+  padding:8px;
+  margin-top:5px;
+  background:#1976d2;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+}
+
+input,select{
+  width:100%;
+  padding:8px;
+  margin:5px 0;
+}
+
+.footer{
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  background:#fff;
+  padding:5px;
+  text-align:center;
+  font-size:12px;
+  box-shadow:0 -2px 5px rgba(0,0,0,0.1);
+}
+
+.hide{display:none;}
+
+/* 🌙 DARK MODE */
+body.dark{background:#121212;color:#fff;}
+.dark .card{background:#1e1e1e;color:#fff;}
+.dark .footer{background:#1e1e1e;}
+.dark .header{background:#000;}
+</style>
+</head>
+
+<body>
+
+<div class="header">🏪 سیستەمی فرۆشتنی کوردی (PRO)</div>
+
+<div class="box">
+
+<!-- LOGIN -->
+<div id="loginBox">
+  <h3>🔐 چوونەژوورەوە</h3>
+  <input id="user" placeholder="ناوی بەکارهێنەر">
+  <input id="pass" type="password" placeholder="وشەی نهێنی">
+  <button onclick="login()">چوونەژوور</button>
+</div>
+
+<!-- APP -->
+<div id="app" class="hide">
+
+<h3 id="roleText"></h3>
+
+<button onclick="toggleDark()">🌙 تاریک / ڕووناک</button>
+
+<!-- ADMIN -->
+<div id="adminPanel" class="hide">
+
+<h3>👑 بەڕێوەبەر</h3>
+
+<input id="pname" placeholder="ناوی کاڵا">
+<input id="pprice" placeholder="نرخی فرۆشتن">
+<input id="pcost" placeholder="نرخی کڕین">
+<input id="pstock" placeholder="کۆگا">
+<input id="pimg" type="file" accept="image/*">
+
+<button onclick="addProduct()">زیادکردنی کاڵا</button>
+
+<hr>
+
+<button onclick="showReport()">📊 ڕاپۆرتی ڕۆژانە</button>
+<button onclick="showBest()">🏆 باشترین فرۆشتن</button>
+<button onclick="showProfit()">💰 قازانج</button>
+<button onclick="showInvoices()">📚 فاکتورەکان</button>
+
+<div id="reportBox"></div>
+
+</div>
+
+<!-- PRODUCTS -->
+<h3>📦 کاڵاکان</h3>
+<div class="grid" id="plist"></div>
+
+<hr>
+
+<!-- CART -->
+<h3>🛒 سەبەتە</h3>
+<div id="cartBox"></div>
+
+<input id="customer" placeholder="ناوی کڕیار">
+
+<select id="payType">
+  <option value="cash">کاش</option>
+  <option value="credit">قەرز</option>
+  <option value="installment">قست</option>
+</select>
+
+<button onclick="checkout()">فرۆشتن + PDF</button>
+
+</div>
+
+<!-- TOTAL -->
+<div class="footer">
+💰 کۆی گشتی:
+<b style="color:#1976d2;font-size:14px;">
+<span id="total">0</span> $
+</b>
+</div>
+
+<script>
+
+/* USERS */
+let users=[
+  {u:"admin",p:"1122",role:"admin"},
+  {u:"staff",p:"1133",role:"cashier"}
+];
+
+let role="";
+
+/* DATA */
+let products=JSON.parse(localStorage.getItem("products")||"[]");
+let sales=JSON.parse(localStorage.getItem("sales")||"[]");
+let invoices=JSON.parse(localStorage.getItem("invoices")||"[]");
+let productSales=JSON.parse(localStorage.getItem("productSales")||"{}");
+
+let cart=[];
+
+/* LOGIN */
+function login(){
+
+  let ok=users.find(x=>x.u==user.value && x.p==pass.value);
+
+  if(!ok) return alert("❌ هەڵەی login");
+
+  role=ok.role;
+
+  loginBox.classList.add("hide");
+  app.classList.remove("hide");
+
+  roleText.innerHTML="👤 رول: "+role;
+
+  if(role=="admin") adminPanel.classList.remove("hide");
+
+  render();
+}
+
+/* DARK MODE */
+function toggleDark(){
+  document.body.classList.toggle("dark");
+
+  localStorage.setItem("theme",
+    document.body.classList.contains("dark")?"dark":"light"
+  );
+}
+
+if(localStorage.getItem("theme")=="dark"){
+  document.body.classList.add("dark");
+}
+
+/* ADD PRODUCT */
+function addProduct(){
+
+  if(role!="admin") return alert("تەنها admin");
+
+  let file=pimg.files[0];
+  let reader=new FileReader();
+
+  reader.onload=function(){
+
+    products.push({
+      name:pname.value,
+      price:Number(pprice.value),
+      cost:Number(pcost.value),
+      stock:Number(pstock.value),
+      img:reader.result
+    });
+
+    localStorage.setItem("products",JSON.stringify(products));
+
+    render();
+    alert("✔ کاڵا زیادکرا");
+  }
+
+  reader.readAsDataURL(file);
+}
+
+/* DELETE PRODUCT */
+function deleteProduct(i){
+
+  if(role!="admin") return;
+
+  products.splice(i,1);
+  localStorage.setItem("products",JSON.stringify(products));
+  render();
+}
+
+/* CART */
+function addToCart(i){
+
+  let p=products[i];
+
+  let item=cart.find(x=>x.name==p.name);
+
+  if(item) item.qty++;
+  else cart.push({name:p.name,price:p.price,cost:p.cost,qty:1});
+
+  renderCart();
+}
+
+function plus(i){cart[i].qty++;renderCart();}
+function minus(i){cart[i].qty--;if(cart[i].qty<=0)cart.splice(i,1);renderCart();}
+
+/* RENDER PRODUCTS */
+function render(){
+
+  plist.innerHTML="";
+
+  products.forEach((p,i)=>{
+
+    plist.innerHTML+=`
+      <div class="card">
+        ${p.img?`<img src="${p.img}" style="width:100%;border-radius:8px;">`:``}
+        🛒 ${p.name}<br>
+        💰 ${p.price}$<br>
+
+        <button onclick="addToCart(${i})">زیادکردن</button>
+
+        ${role=="admin"?`<button style="background:red" onclick="deleteProduct(${i})">🗑️ سڕینەوە</button>`:""}
+      </div>
+    `;
+  });
+
+  renderCart();
+}
+
+/* CART */
+function renderCart(){
+
+  cartBox.innerHTML="";
+
+  let total=0;
+
+  cart.forEach((c,i)=>{
+
+    let t=c.price*c.qty;
+    total+=t;
+
+    cartBox.innerHTML+=`
+      <div class="card">
+        🛒 ${c.name}<br>
+        ژمارە: ${c.qty}<br>
+        کۆی نرخ: ${t}$
+
+        <button onclick="plus(${i})">+</button>
+        <button onclick="minus(${i})">-</button>
+      </div>
+    `;
+  });
+
+  document.getElementById("total").innerText=total.toFixed(2);
+}
+
+/* CHECKOUT */
+function checkout(){
+
+  if(cart.length==0) return alert("هیچ شت نییە");
+
+  let customer=customer.value||"کڕیاری ئاسایی";
+
+  let subtotal=cart.reduce((a,b)=>a+b.price*b.qty,0);
+  let tax=subtotal*0.1;
+  let total=subtotal+tax;
+
+  let profit=0;
+
+  cart.forEach(i=>{
+    profit+=(i.price-i.cost)*i.qty;
+
+    if(!productSales[i.name])productSales[i.name]=0;
+    productSales[i.name]+=i.qty;
+  });
+
+  localStorage.setItem("productSales",JSON.stringify(productSales));
+
+  let inv={
+    id:"INV-"+Date.now(),
+    date:new Date().toLocaleString(),
+    customer,
+    total,
+    profit,
+    items:cart
+  };
+
+  invoices.push(inv);
+  localStorage.setItem("invoices",JSON.stringify(invoices));
+
+  sales.push({date:new Date().toLocaleDateString(),total,profit});
+  localStorage.setItem("sales",JSON.stringify(sales));
+
+  autoPDF(inv);
+
+  cart=[];
+  renderCart();
+}
+
+/* PDF */
+function autoPDF(inv){
+
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF();
+
+  let y=10;
+
+  doc.text("فاکتوری فرۆشتن",10,y);y+=10;
+  doc.text(inv.id,10,y);y+=10;
+  doc.text(inv.customer,10,y);y+=10;
+
+  inv.items.forEach(i=>{
+    doc.text(`${i.name} x${i.qty} = ${i.price*i.qty}$`,10,y);
+    y+=8;
+  });
+
+  doc.text("TOTAL: "+inv.total+"$",10,y);
+
+  doc.save(inv.id+".pdf");
+}
+
+/* REPORTS */
+function showReport(){
+  let t=sales.filter(s=>s.date==new Date().toLocaleDateString());
+  reportBox.innerHTML="📊 فرۆشتن: "+t.length;
+}
+
+function showBest(){
+  let arr=Object.keys(productSales).map(k=>({name:k,qty:productSales[k]}));
+  arr.sort((a,b)=>b.qty-a.qty);
+
+  reportBox.innerHTML="<h3>🏆 باشترین</h3>";
+
+  arr.slice(0,5).forEach(p=>{
+    reportBox.innerHTML+=`<div class="card">${p.name} - ${p.qty}</div>`;
+  });
+}
+
+function showProfit(){
+  let t=sales.filter(s=>s.date==new Date().toLocaleDateString());
+  let p=t.reduce((a,b)=>a+b.profit,0);
+  reportBox.innerHTML="💰 قازانج: "+p+"$";
+}
+
+function showInvoices(){
+  reportBox.innerHTML="<h3>📚 فاکتورەکان</h3>";
+
+  invoices.forEach(i=>{
+    reportBox.innerHTML+=`<div class="card">${i.id} - ${i.total}$</div>`;
+  });
+}
+
+render();
+
+</script>
+
+</body>
+</html>
